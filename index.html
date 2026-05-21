@@ -121,7 +121,6 @@
             width: 100%;
             margin-bottom: 5px;
         }
-        /* Novas classes de Status e Ações */
         .status-cadastrado { background-color: var(--info-color); color: white; }
         .status-passado { background-color: var(--warning-color); color: black; }
         .status-pago { background-color: var(--success-color); color: white; }
@@ -168,9 +167,11 @@
             font-weight: bold;
             color: #333;
         }
-        .filtros-container input[type="date"] {
+        .filtros-container input[type="date"], .filtros-container select {
             width: auto;
             padding: 6px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
         }
         .btn-filtrar {
             background: var(--primary-color);
@@ -224,18 +225,8 @@
             text-align: center;
             border-bottom: 4px solid var(--primary-color);
         }
-        .kpi-card h3 { 
-            margin: 0; 
-            font-size: 14px; 
-            color: #666; 
-            text-transform: uppercase; 
-        }
-        .kpi-card p { 
-            margin: 10px 0 0 0; 
-            font-size: 24px; 
-            font-weight: bold; 
-            color: var(--primary-color); 
-        }
+        .kpi-card h3 { margin: 0; font-size: 14px; color: #666; text-transform: uppercase; }
+        .kpi-card p { margin: 10px 0 0 0; font-size: 24px; font-weight: bold; color: var(--primary-color); }
     </style>
 </head>
 <body>
@@ -306,8 +297,48 @@
         <h3 style="color: var(--primary-color);">Boletos Cadastrados</h3>
         
         <div class="filtros-container">
-            <label>Filtrar por Vencimento Inicial: <input type="date" id="dataInicialTabela"></label>
+            <label>Vencimento Inicial: <input type="date" id="dataInicialTabela"></label>
             <label>Vencimento Final: <input type="date" id="dataFinalTabela"></label>
+            
+            <label>Fornecedor: 
+                <select id="filtroFornecedor">
+                    <option value="">Todos</option>
+                </select>
+            </label>
+            
+            <label>Serviço: 
+                <select id="filtroTipoServico">
+                    <option value="">Todos</option>
+                </select>
+            </label>
+            
+            <label>Faturado: 
+                <select id="filtroFaturado">
+                    <option value="">Todos</option>
+                    <option value="Jan">Jan</option>
+                    <option value="Fev">Fev</option>
+                    <option value="Mar">Mar</option>
+                    <option value="Abr">Abr</option>
+                    <option value="Mai">Mai</option>
+                    <option value="Jun">Jun</option>
+                    <option value="Jul">Jul</option>
+                    <option value="Ago">Ago</option>
+                    <option value="Set">Set</option>
+                    <option value="Out">Out</option>
+                    <option value="Nov">Nov</option>
+                    <option value="Dez">Dez</option>
+                </select>
+            </label>
+
+            <label>Status: 
+                <select id="filtroStatus">
+                    <option value="">Todos</option>
+                    <option value="CADASTRADO">CADASTRADO</option>
+                    <option value="PASSADO PARA O FINANCEIRO">PASSADO PARA O FINANCEIRO</option>
+                    <option value="PAGO">PAGO</option>
+                </select>
+            </label>
+
             <button class="btn-filtrar" onclick="atualizarInterface()">Aplicar Filtro</button>
             <button class="btn-limpar" onclick="limparFiltrosTabela()">Limpar</button>
         </div>
@@ -326,7 +357,8 @@
                         <th>OBSERVAÇÕES</th>
                         <th>DATA/HORA CADASTRO</th>
                         <th>STATUS</th>
-                        <th>AÇÕES</th> </tr>
+                        <th>AÇÕES</th>
+                    </tr>
                 </thead>
                 <tbody id="tabelaBoletos"></tbody>
             </table>
@@ -409,12 +441,17 @@
     let boletos = [];
     let analisesMensais = {};
     let chartInstances = {};
-    let idEmEdicao = null; // Variável de controle para saber se estamos editando
+    let idEmEdicao = null;
 
     // 2. INICIALIZAÇÃO E POPULAÇÃO DOS SELECTS
     window.onload = async () => {
+        // Inputs de Cadastro
         const selectFornecedor = document.getElementById('fornecedor');
         const selectServico = document.getElementById('tipoServico');
+        
+        // Inputs de Filtro
+        const filtroFornecedor = document.getElementById('filtroFornecedor');
+        const filtroServico = document.getElementById('filtroTipoServico');
 
         selectFornecedor.add(new Option('Selecione', '', true, true));
         selectServico.add(new Option('Selecione', '', true, true));
@@ -422,8 +459,15 @@
         selectFornecedor.options[0].disabled = true;
         selectServico.options[0].disabled = true;
 
-        listaFornecedores.forEach(f => selectFornecedor.add(new Option(f, f)));
-        listaServicos.forEach(s => selectServico.add(new Option(s, s)));
+        listaFornecedores.forEach(f => {
+            selectFornecedor.add(new Option(f, f));
+            filtroFornecedor.add(new Option(f, f));
+        });
+        
+        listaServicos.forEach(s => {
+            selectServico.add(new Option(s, s));
+            filtroServico.add(new Option(s, s));
+        });
 
         const mesAtualIndex = new Date().getMonth();
         document.getElementById('mesAnalise').value = mesesOrdem[mesAtualIndex];
@@ -491,7 +535,6 @@
         const tipoDespesaForm = document.getElementById('tipoDespesa').value;
         const observacoesForm = document.getElementById('observacoes').value;
 
-        // Se estiver Editando um boleto existente
         if (idEmEdicao) {
             try {
                 const { error } = await _supabase.from('boletos').update({
@@ -507,7 +550,6 @@
 
                 if (error) throw error;
 
-                // Atualiza localmente
                 const index = boletos.findIndex(b => b.id === idEmEdicao);
                 if (index !== -1) {
                     boletos[index].fornecedor = fornecedorForm;
@@ -520,14 +562,13 @@
                     boletos[index].observacoes = observacoesForm;
                 }
 
-                cancelarEdicao(); // Limpa form e reseta visual
+                cancelarEdicao();
                 atualizarInterface();
                 alert("Boleto atualizado com sucesso!");
             } catch (error) {
                 alert("Erro ao atualizar o boleto: " + error.message);
             }
         } 
-        // Se for um Novo Cadastro
         else {
             const agora = new Date();
             const dataHoraFormatada = agora.toLocaleDateString('pt-BR') + ' ' + agora.toLocaleTimeString('pt-BR');
@@ -593,8 +634,6 @@
             btnSubmit.style.backgroundColor = "var(--success-color)";
             
             document.getElementById('btnCancelarEdicao').style.display = "inline-block";
-            
-            // Rola a tela para o topo suavemente
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
     }
@@ -623,7 +662,7 @@
         }
     }
 
-    // 6. ALTERAR STATUS 
+    // 6. ALTERAR STATUS
     async function alternarStatus(id) {
         const boleto = boletos.find(b => b.id === id);
         if (boleto) {
@@ -645,17 +684,28 @@
         }
     }
 
-    // 7. ATUALIZAR INTERFACE DA TABELA (RENDERIZAÇÃO)
+    // 7. ATUALIZAR INTERFACE DA TABELA (RENDERIZAÇÃO COM NOVOS FILTROS)
     function atualizarInterface() {
         const tbody = document.getElementById('tabelaBoletos');
         tbody.innerHTML = '';
 
         let boletosFiltradosTabela = boletos;
+        
+        // Coletando valores de todos os filtros
         const dtInicial = document.getElementById('dataInicialTabela').value;
         const dtFinal = document.getElementById('dataFinalTabela').value;
+        const fFornecedor = document.getElementById('filtroFornecedor').value;
+        const fServico = document.getElementById('filtroTipoServico').value;
+        const fFaturado = document.getElementById('filtroFaturado').value;
+        const fStatus = document.getElementById('filtroStatus').value;
 
+        // Aplicando os filtros sequencialmente
         if (dtInicial) boletosFiltradosTabela = boletosFiltradosTabela.filter(b => b.vencimento >= dtInicial);
         if (dtFinal) boletosFiltradosTabela = boletosFiltradosTabela.filter(b => b.vencimento <= dtFinal);
+        if (fFornecedor) boletosFiltradosTabela = boletosFiltradosTabela.filter(b => b.fornecedor === fFornecedor);
+        if (fServico) boletosFiltradosTabela = boletosFiltradosTabela.filter(b => b.tipoServico === fServico);
+        if (fFaturado) boletosFiltradosTabela = boletosFiltradosTabela.filter(b => b.faturado === fFaturado);
+        if (fStatus) boletosFiltradosTabela = boletosFiltradosTabela.filter(b => b.status === fStatus);
 
         boletosFiltradosTabela.forEach(b => {
             const tr = document.createElement('tr');
@@ -697,6 +747,10 @@
     function limparFiltrosTabela() {
         document.getElementById('dataInicialTabela').value = '';
         document.getElementById('dataFinalTabela').value = '';
+        document.getElementById('filtroFornecedor').value = '';
+        document.getElementById('filtroTipoServico').value = '';
+        document.getElementById('filtroFaturado').value = '';
+        document.getElementById('filtroStatus').value = '';
         atualizarInterface();
     }
 
