@@ -12,6 +12,7 @@
             --secondary-color: #f4f4f9;
             --success-color: #28a745;
             --warning-color: #ffc107;
+            --info-color: #17a2b8; /* Nova cor para CADASTRADO */
         }
         body {
             font-family: Arial, sans-serif;
@@ -116,8 +117,14 @@
             color: #000;
             width: 100%;
         }
+        /* Novas classes de Status */
+        .status-cadastrado {
+            background-color: var(--info-color);
+            color: white;
+        }
         .status-passado {
             background-color: var(--warning-color);
+            color: black;
         }
         .status-pago {
             background-color: var(--success-color);
@@ -420,14 +427,12 @@
         const mesAtualIndex = new Date().getMonth();
         document.getElementById('mesAnalise').value = mesesOrdem[mesAtualIndex];
 
-        // Sincroniza dados com o Supabase na abertura do app
         await carregarDadosDoSupabase();
     };
 
     // Buscar dados das duas tabelas em nuvem
     async function carregarDadosDoSupabase() {
         try {
-            // Buscar Boletos
             const { data: dataBoletos, error: errB } = await _supabase.from('boletos').select('*').order('created_at', { ascending: false });
             if (errB) throw errB;
             
@@ -445,7 +450,6 @@
                 status: b.status
             })) || [];
 
-            // Buscar Análises Descritivas
             const { data: dataAnalises, error: errA } = await _supabase.from('analises').select('*');
             if (errA) throw errA;
             
@@ -475,7 +479,7 @@
         }
     }
 
-    // 4. CADASTRO DE BOLETOS (INSERE NO SUPABASE)
+    // 4. CADASTRO DE BOLETOS
     document.getElementById('boletoForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         
@@ -494,7 +498,7 @@
             tipoDespesa: document.getElementById('tipoDespesa').value,
             observacoes: document.getElementById('observacoes').value,
             dataHoraCadastro: dataHoraFormatada,
-            status: "PASSADO PARA O FINANCEIRO"
+            status: "CADASTRADO" // STATUS INICIAL ALTERADO AQUI
         };
 
         try {
@@ -514,7 +518,7 @@
 
             if (error) throw error;
 
-            boletos.unshift(novoBoleto); // Atualiza a lista local em memória
+            boletos.unshift(novoBoleto);
             this.reset();
             atualizarInterface();
         } catch (error) {
@@ -522,11 +526,20 @@
         }
     });
 
-    // 5. ALTERAR STATUS (ATUALIZA NO SUPABASE)
+    // 5. ALTERAR STATUS (AGORA COM 3 ETAPAS)
     async function alternarStatus(id) {
         const boleto = boletos.find(b => b.id === id);
         if (boleto) {
-            const novoStatus = boleto.status === "PASSADO PARA O FINANCEIRO" ? "PAGO" : "PASSADO PARA O FINANCEIRO";
+            let novoStatus = "";
+            
+            // Lógica de progressão de status
+            if (boleto.status === "CADASTRADO") {
+                novoStatus = "PASSADO PARA O FINANCEIRO";
+            } else if (boleto.status === "PASSADO PARA O FINANCEIRO") {
+                novoStatus = "PAGO";
+            } else {
+                novoStatus = "CADASTRADO"; // Retorna ao início se clicar no PAGO
+            }
             
             try {
                 const { error } = await _supabase.from('boletos').update({ status: novoStatus }).eq('id', id);
@@ -557,7 +570,12 @@
             
             const valorFormatado = b.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             const dataVencimento = new Date(b.vencimento + 'T00:00:00').toLocaleDateString('pt-BR');
-            const classeStatus = b.status === "PAGO" ? "status-pago" : "status-passado";
+            
+            // Definição da cor com base no status atual
+            let classeStatus = "";
+            if (b.status === "CADASTRADO") classeStatus = "status-cadastrado";
+            else if (b.status === "PASSADO PARA O FINANCEIRO") classeStatus = "status-passado";
+            else if (b.status === "PAGO") classeStatus = "status-pago";
 
             tr.innerHTML = `
                 <td>${b.fornecedor}</td>
@@ -585,7 +603,7 @@
         atualizarInterface();
     }
 
-    // 7. GERENCIAMENTO DA ANÁLISE DESCRITIVA MENSAL (UPSERT NO SUPABASE)
+    // 7. GERENCIAMENTO DA ANÁLISE DESCRITIVA MENSAL
     function carregarTextoAnalise() {
         const mesSelecionado = document.getElementById('mesAnalise').value;
         const textarea = document.getElementById('textoAnalise');
@@ -642,7 +660,7 @@
             </div>
         `;
 
-        // 8.2. Preparando os dados para os quatro gráficos estruturados
+        // 8.2. Preparando os dados
         const dadosServicosFiltrados = {
             "Aluguel de Equipamentos": 0,
             "Custo com Oxigênio": 0,
