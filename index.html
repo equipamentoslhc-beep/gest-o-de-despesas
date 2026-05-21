@@ -12,7 +12,8 @@
             --secondary-color: #f4f4f9;
             --success-color: #28a745;
             --warning-color: #ffc107;
-            --info-color: #17a2b8; /* Nova cor para CADASTRADO */
+            --info-color: #17a2b8;
+            --danger-color: #dc3545;
         }
         body {
             font-family: Arial, sans-serif;
@@ -87,6 +88,7 @@
             border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
+            transition: background 0.3s;
         }
         button[type="submit"]:hover, .btn-acao:hover {
             background: #002244;
@@ -103,6 +105,7 @@
             border: 1px solid #ddd;
             padding: 10px;
             text-align: left;
+            vertical-align: middle;
         }
         th {
             background-color: var(--primary-color);
@@ -116,20 +119,27 @@
             font-weight: bold;
             color: #000;
             width: 100%;
+            margin-bottom: 5px;
         }
-        /* Novas classes de Status */
-        .status-cadastrado {
-            background-color: var(--info-color);
+        /* Novas classes de Status e Ações */
+        .status-cadastrado { background-color: var(--info-color); color: white; }
+        .status-passado { background-color: var(--warning-color); color: black; }
+        .status-pago { background-color: var(--success-color); color: white; }
+        
+        .btn-editar, .btn-excluir {
+            padding: 5px 8px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
             color: white;
+            font-size: 11px;
+            margin: 2px;
+            width: 100%;
         }
-        .status-passado {
-            background-color: var(--warning-color);
-            color: black;
-        }
-        .status-pago {
-            background-color: var(--success-color);
-            color: white;
-        }
+        .btn-editar { background-color: #007bff; }
+        .btn-excluir { background-color: var(--danger-color); }
+        .acoes-flex { display: flex; flex-direction: column; gap: 4px; }
         
         /* Filtros e Blocos Descritivos */
         .filtros-container, .analise-container {
@@ -288,7 +298,8 @@
                 <label for="observacoes">OBSERVAÇÕES</label>
                 <input type="text" id="observacoes">
             </div>
-            <button type="submit">Cadastrar Boleto</button>
+            <button type="submit" id="btnSubmitForm">Cadastrar Boleto</button>
+            <button type="button" id="btnCancelarEdicao" class="btn-limpar" style="display: none;" onclick="cancelarEdicao()">Cancelar Edição</button>
         </form>
 
         <hr style="border: 1px solid #ddd; margin: 30px 0;">
@@ -315,7 +326,7 @@
                         <th>OBSERVAÇÕES</th>
                         <th>DATA/HORA CADASTRO</th>
                         <th>STATUS</th>
-                    </tr>
+                        <th>AÇÕES</th> </tr>
                 </thead>
                 <tbody id="tabelaBoletos"></tbody>
             </table>
@@ -323,7 +334,6 @@
     </div>
 
     <div id="dashboard" class="screen">
-        
         <div class="filtros-container">
             <label>Filtrar por Vencimento Inicial: <input type="date" id="dataInicialFiltro"></label>
             <label>Vencimento Final: <input type="date" id="dataFinalFiltro"></label>
@@ -331,22 +341,13 @@
             <button class="btn-limpar" onclick="limparFiltrosDashboard()">Limpar</button>
         </div>
 
-        <div class="kpi-container" id="kpiCards">
-            </div>
+        <div class="kpi-container" id="kpiCards"></div>
 
         <div class="dashboard-grid">
-            <div class="chart-container">
-                <canvas id="graficoServicos"></canvas>
-            </div>
-            <div class="chart-container">
-                <canvas id="graficoFornecedores"></canvas>
-            </div>
-            <div class="chart-container">
-                <canvas id="graficoHistoricoUnicas"></canvas>
-            </div>
-            <div class="chart-container">
-                <canvas id="graficoHistoricoTotais"></canvas>
-            </div>
+            <div class="chart-container"><canvas id="graficoServicos"></canvas></div>
+            <div class="chart-container"><canvas id="graficoFornecedores"></canvas></div>
+            <div class="chart-container"><canvas id="graficoHistoricoUnicas"></canvas></div>
+            <div class="chart-container"><canvas id="graficoHistoricoTotais"></canvas></div>
         </div>
 
         <div class="analise-container">
@@ -376,7 +377,6 @@
             </div>
             <button class="btn-acao" style="margin-top: 10px;" onclick="salvarTextoAnalise()">Salvar Análise do Mês</button>
         </div>
-
     </div>
 </div>
 
@@ -409,6 +409,7 @@
     let boletos = [];
     let analisesMensais = {};
     let chartInstances = {};
+    let idEmEdicao = null; // Variável de controle para saber se estamos editando
 
     // 2. INICIALIZAÇÃO E POPULAÇÃO DOS SELECTS
     window.onload = async () => {
@@ -430,7 +431,6 @@
         await carregarDadosDoSupabase();
     };
 
-    // Buscar dados das duas tabelas em nuvem
     async function carregarDadosDoSupabase() {
         try {
             const { data: dataBoletos, error: errB } = await _supabase.from('boletos').select('*').order('created_at', { ascending: false });
@@ -465,7 +465,6 @@
         }
     }
 
-    // 3. NAVEGAÇÃO ENTRE ABAS
     function switchTab(tabId) {
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -479,67 +478,160 @@
         }
     }
 
-    // 4. CADASTRO DE BOLETOS
+    // 3. SALVAR OU ATUALIZAR BOLETOS
     document.getElementById('boletoForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         
-        const agora = new Date();
-        const dataHoraFormatada = agora.toLocaleDateString('pt-BR') + ' ' + agora.toLocaleTimeString('pt-BR');
-        const idUnico = Date.now();
+        const fornecedorForm = document.getElementById('fornecedor').value;
+        const tipoServicoForm = document.getElementById('tipoServico').value;
+        const numDocForm = document.getElementById('numDoc').value;
+        const valorForm = parseFloat(document.getElementById('valor').value);
+        const vencimentoForm = document.getElementById('vencimento').value;
+        const faturadoForm = document.getElementById('faturado').value;
+        const tipoDespesaForm = document.getElementById('tipoDespesa').value;
+        const observacoesForm = document.getElementById('observacoes').value;
 
-        const novoBoleto = {
-            id: idUnico,
-            fornecedor: document.getElementById('fornecedor').value,
-            tipoServico: document.getElementById('tipoServico').value,
-            numDoc: document.getElementById('numDoc').value,
-            valor: parseFloat(document.getElementById('valor').value),
-            vencimento: document.getElementById('vencimento').value,
-            faturado: document.getElementById('faturado').value,
-            tipoDespesa: document.getElementById('tipoDespesa').value,
-            observacoes: document.getElementById('observacoes').value,
-            dataHoraCadastro: dataHoraFormatada,
-            status: "CADASTRADO" // STATUS INICIAL ALTERADO AQUI
-        };
+        // Se estiver Editando um boleto existente
+        if (idEmEdicao) {
+            try {
+                const { error } = await _supabase.from('boletos').update({
+                    fornecedor: fornecedorForm,
+                    tipo_servico: tipoServicoForm,
+                    num_doc: numDocForm,
+                    valor: valorForm,
+                    vencimento: vencimentoForm,
+                    faturado: faturadoForm,
+                    tipo_despesa: tipoDespesaForm,
+                    observacoes: observacoesForm
+                }).eq('id', idEmEdicao);
 
-        try {
-            const { error } = await _supabase.from('boletos').insert([{
-                id: novoBoleto.id,
-                fornecedor: novoBoleto.fornecedor,
-                tipo_servico: novoBoleto.tipoServico,
-                num_doc: novoBoleto.numDoc,
-                valor: novoBoleto.valor,
-                vencimento: novoBoleto.vencimento,
-                faturado: novoBoleto.faturado,
-                tipo_despesa: novoBoleto.tipoDespesa,
-                observacoes: novoBoleto.observacoes,
-                data_hora_cadastro: novoBoleto.dataHoraCadastro,
-                status: novoBoleto.status
-            }]);
+                if (error) throw error;
 
-            if (error) throw error;
+                // Atualiza localmente
+                const index = boletos.findIndex(b => b.id === idEmEdicao);
+                if (index !== -1) {
+                    boletos[index].fornecedor = fornecedorForm;
+                    boletos[index].tipoServico = tipoServicoForm;
+                    boletos[index].numDoc = numDocForm;
+                    boletos[index].valor = valorForm;
+                    boletos[index].vencimento = vencimentoForm;
+                    boletos[index].faturado = faturadoForm;
+                    boletos[index].tipoDespesa = tipoDespesaForm;
+                    boletos[index].observacoes = observacoesForm;
+                }
 
-            boletos.unshift(novoBoleto);
-            this.reset();
-            atualizarInterface();
-        } catch (error) {
-            alert("Erro ao salvar o boleto: " + error.message);
+                cancelarEdicao(); // Limpa form e reseta visual
+                atualizarInterface();
+                alert("Boleto atualizado com sucesso!");
+            } catch (error) {
+                alert("Erro ao atualizar o boleto: " + error.message);
+            }
+        } 
+        // Se for um Novo Cadastro
+        else {
+            const agora = new Date();
+            const dataHoraFormatada = agora.toLocaleDateString('pt-BR') + ' ' + agora.toLocaleTimeString('pt-BR');
+            const idUnico = Date.now();
+
+            const novoBoleto = {
+                id: idUnico,
+                fornecedor: fornecedorForm,
+                tipoServico: tipoServicoForm,
+                numDoc: numDocForm,
+                valor: valorForm,
+                vencimento: vencimentoForm,
+                faturado: faturadoForm,
+                tipoDespesa: tipoDespesaForm,
+                observacoes: observacoesForm,
+                dataHoraCadastro: dataHoraFormatada,
+                status: "CADASTRADO" 
+            };
+
+            try {
+                const { error } = await _supabase.from('boletos').insert([{
+                    id: novoBoleto.id,
+                    fornecedor: novoBoleto.fornecedor,
+                    tipo_servico: novoBoleto.tipoServico,
+                    num_doc: novoBoleto.numDoc,
+                    valor: novoBoleto.valor,
+                    vencimento: novoBoleto.vencimento,
+                    faturado: novoBoleto.faturado,
+                    tipo_despesa: novoBoleto.tipoDespesa,
+                    observacoes: novoBoleto.observacoes,
+                    data_hora_cadastro: novoBoleto.dataHoraCadastro,
+                    status: novoBoleto.status
+                }]);
+
+                if (error) throw error;
+
+                boletos.unshift(novoBoleto);
+                this.reset();
+                atualizarInterface();
+            } catch (error) {
+                alert("Erro ao salvar o boleto: " + error.message);
+            }
         }
     });
 
-    // 5. ALTERAR STATUS (AGORA COM 3 ETAPAS)
+    // 4. PREPARAR FORMULÁRIO PARA EDIÇÃO
+    function editarBoleto(id) {
+        const boleto = boletos.find(b => b.id === id);
+        if (boleto) {
+            idEmEdicao = id;
+            
+            document.getElementById('fornecedor').value = boleto.fornecedor;
+            document.getElementById('tipoServico').value = boleto.tipoServico;
+            document.getElementById('numDoc').value = boleto.numDoc;
+            document.getElementById('valor').value = boleto.valor;
+            document.getElementById('vencimento').value = boleto.vencimento;
+            document.getElementById('faturado').value = boleto.faturado;
+            document.getElementById('tipoDespesa').value = boleto.tipoDespesa;
+            document.getElementById('observacoes').value = boleto.observacoes || '';
+
+            const btnSubmit = document.getElementById('btnSubmitForm');
+            btnSubmit.innerText = "Atualizar Boleto";
+            btnSubmit.style.backgroundColor = "var(--success-color)";
+            
+            document.getElementById('btnCancelarEdicao').style.display = "inline-block";
+            
+            // Rola a tela para o topo suavemente
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    }
+
+    function cancelarEdicao() {
+        idEmEdicao = null;
+        document.getElementById('boletoForm').reset();
+        const btnSubmit = document.getElementById('btnSubmitForm');
+        btnSubmit.innerText = "Cadastrar Boleto";
+        btnSubmit.style.backgroundColor = "var(--primary-color)";
+        document.getElementById('btnCancelarEdicao').style.display = "none";
+    }
+
+    // 5. EXCLUIR BOLETO
+    async function excluirBoleto(id) {
+        if (confirm("Tem certeza que deseja EXCLUIR este boleto? Esta ação não pode ser desfeita.")) {
+            try {
+                const { error } = await _supabase.from('boletos').delete().eq('id', id);
+                if (error) throw error;
+
+                boletos = boletos.filter(b => b.id !== id);
+                atualizarInterface();
+            } catch (error) {
+                alert("Erro ao excluir boleto: " + error.message);
+            }
+        }
+    }
+
+    // 6. ALTERAR STATUS 
     async function alternarStatus(id) {
         const boleto = boletos.find(b => b.id === id);
         if (boleto) {
             let novoStatus = "";
             
-            // Lógica de progressão de status
-            if (boleto.status === "CADASTRADO") {
-                novoStatus = "PASSADO PARA O FINANCEIRO";
-            } else if (boleto.status === "PASSADO PARA O FINANCEIRO") {
-                novoStatus = "PAGO";
-            } else {
-                novoStatus = "CADASTRADO"; // Retorna ao início se clicar no PAGO
-            }
+            if (boleto.status === "CADASTRADO") novoStatus = "PASSADO PARA O FINANCEIRO";
+            else if (boleto.status === "PASSADO PARA O FINANCEIRO") novoStatus = "PAGO";
+            else novoStatus = "CADASTRADO"; 
             
             try {
                 const { error } = await _supabase.from('boletos').update({ status: novoStatus }).eq('id', id);
@@ -553,7 +645,7 @@
         }
     }
 
-    // 6. ATUALIZAR INTERFACE DA TABELA
+    // 7. ATUALIZAR INTERFACE DA TABELA (RENDERIZAÇÃO)
     function atualizarInterface() {
         const tbody = document.getElementById('tabelaBoletos');
         tbody.innerHTML = '';
@@ -571,7 +663,6 @@
             const valorFormatado = b.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             const dataVencimento = new Date(b.vencimento + 'T00:00:00').toLocaleDateString('pt-BR');
             
-            // Definição da cor com base no status atual
             let classeStatus = "";
             if (b.status === "CADASTRADO") classeStatus = "status-cadastrado";
             else if (b.status === "PASSADO PARA O FINANCEIRO") classeStatus = "status-passado";
@@ -592,6 +683,12 @@
                         ${b.status}
                     </button>
                 </td>
+                <td>
+                    <div class="acoes-flex">
+                        <button class="btn-editar" onclick="editarBoleto(${b.id})">Editar</button>
+                        <button class="btn-excluir" onclick="excluirBoleto(${b.id})">Excluir</button>
+                    </div>
+                </td>
             `;
             tbody.appendChild(tr);
         });
@@ -603,7 +700,7 @@
         atualizarInterface();
     }
 
-    // 7. GERENCIAMENTO DA ANÁLISE DESCRITIVA MENSAL
+    // 8. ANÁLISE DESCRITIVA MENSAL
     function carregarTextoAnalise() {
         const mesSelecionado = document.getElementById('mesAnalise').value;
         const textarea = document.getElementById('textoAnalise');
@@ -622,7 +719,6 @@
             }, { onConflict: 'mes' });
 
             if (error) throw error;
-
             analisesMensais[mesSelecionado] = texto;
             alert(`Análise de ${mesSelecionado} salva em nuvem com sucesso!`);
         } catch (error) {
@@ -630,7 +726,7 @@
         }
     }
 
-    // 8. FILTROS E ATUALIZAÇÃO DO DASHBOARD
+    // 9. DASHBOARD
     function limparFiltrosDashboard() {
         document.getElementById('dataInicialFiltro').value = '';
         document.getElementById('dataFinalFiltro').value = '';
@@ -645,7 +741,6 @@
         if (dtInicial) boletosFiltrados = boletosFiltrados.filter(b => b.vencimento >= dtInicial);
         if (dtFinal) boletosFiltrados = boletosFiltrados.filter(b => b.vencimento <= dtFinal);
 
-        // 8.1. KPI Cards
         const totalGeral = boletosFiltrados.reduce((acc, b) => acc + b.valor, 0);
         const pendentes = boletosFiltrados.filter(b => b.status === "PASSADO PARA O FINANCEIRO").reduce((acc, b) => acc + b.valor, 0);
         
@@ -660,14 +755,9 @@
             </div>
         `;
 
-        // 8.2. Preparando os dados
         const dadosServicosFiltrados = {
-            "Aluguel de Equipamentos": 0,
-            "Custo com Oxigênio": 0,
-            "Esterilização": 0,
-            "Manutenção": 0
+            "Aluguel de Equipamentos": 0, "Custo com Oxigênio": 0, "Esterilização": 0, "Manutenção": 0
         };
-        
         const dadosFornecedoresFiltrados = {};
         const dadosHistoricoUnicas = {};
         const dadosHistoricoTotais = {};
@@ -711,7 +801,6 @@
         const keysTotaisOrd = Object.keys(dadosHistoricoTotais).sort((a, b) => mesesOrdem.indexOf(a) - mesesOrdem.indexOf(b));
         const valsTotaisOrd = keysTotaisOrd.map(k => dadosHistoricoTotais[k]);
 
-        // 8.3. Renderizando os Gráficos
         const corPadrao = 'rgba(91, 155, 213, 0.9)';
 
         renderizarGrafico('graficoServicos', 'bar', 'Despesas com Terceiros (Por Serviço)', Object.keys(dadosServicosFiltrados), Object.values(dadosServicosFiltrados), corPadrao);
@@ -720,47 +809,20 @@
         renderizarGrafico('graficoHistoricoTotais', 'bar', 'Histórico Despesas Mensais (Totais)', keysTotaisOrd, valsTotaisOrd, '#28a745');
     }
 
-    // 9. FUNÇÃO CONSTRUTORA DE GRÁFICOS
     function renderizarGrafico(canvasId, tipo, titulo, labels, dados, cor) {
         const ctx = document.getElementById(canvasId).getContext('2d');
-        
-        if (chartInstances[canvasId]) {
-            chartInstances[canvasId].destroy();
-        }
+        if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
 
         chartInstances[canvasId] = new Chart(ctx, {
             type: tipo,
             data: {
                 labels: labels,
-                datasets: [{
-                    label: 'Valor',
-                    data: dados,
-                    backgroundColor: cor,
-                    borderWidth: 0
-                }]
+                datasets: [{ label: 'Valor', data: dados, backgroundColor: cor, borderWidth: 0 }]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    title: {
-                        display: true,
-                        text: titulo,
-                        font: { size: 16, family: 'Arial' },
-                        color: '#333'
-                    },
-                    legend: { display: false }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            callback: function(value) {
-                                return 'R$ ' + value.toLocaleString('pt-BR');
-                            }
-                        }
-                    }
-                }
+                responsive: true, maintainAspectRatio: false,
+                plugins: { title: { display: true, text: titulo, font: { size: 16, family: 'Arial' }, color: '#333' }, legend: { display: false } },
+                scales: { y: { beginAtZero: true, ticks: { callback: function(value) { return 'R$ ' + value.toLocaleString('pt-BR'); } } } }
             }
         });
     }
