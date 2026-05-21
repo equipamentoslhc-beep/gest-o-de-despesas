@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestão de Boletos - Home Care</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --primary-color: #003366;
+            --secondary-color: #f4f4f9;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: var(--secondary-color);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid var(--primary-color);
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            cursor: pointer;
+            background: #e9ecef;
+            border: none;
+            outline: none;
+            font-weight: bold;
+            color: #333;
+        }
+        .tab-btn.active {
+            background: var(--primary-color);
+            color: white;
+        }
+        .screen {
+            display: none;
+        }
+        .screen.active {
+            display: block;
+        }
+        form {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        label {
+            font-weight: bold;
+            font-size: 12px;
+            color: var(--primary-color);
+            display: block;
+            margin-bottom: 5px;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        textarea {
+            resize: vertical;
+            font-family: Arial, sans-serif;
+        }
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        button[type="submit"], .btn-acao {
+            background: var(--primary-color);
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button[type="submit"]:hover, .btn-acao:hover {
+            background: #002244;
+        }
+        
+        /* Estilos da Tabela */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 13px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        .btn-status {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            color: #000;
+            width: 100%;
+        }
+        .status-passado {
+            background-color: var(--warning-color);
+        }
+        .status-pago {
+            background-color: var(--success-color);
+            color: white;
+        }
+        
+        /* Filtros e Blocos Descritivos */
+        .filtros-container, .analise-container {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+            border-left: 5px solid var(--primary-color);
+        }
+        .analise-container {
+            flex-direction: column;
+            align-items: flex-start;
+            border-left: 5px solid var(--success-color);
+        }
+        .filtros-container label {
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+        }
+        .filtros-container input[type="date"] {
+            width: auto;
+            padding: 6px;
+        }
+        .btn-filtrar {
+            background: var(--primary-color);
+            color: white;
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn-limpar {
+            background: #6c757d;
+            color: white;
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        /* Dashboard Styles */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 30px;
+            margin-top: 20px;
+            margin-bottom: 30px;
+        }
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-top: 5px solid var(--primary-color);
+            position: relative;
+            height: 350px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .kpi-container {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .kpi-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            flex: 1;
+            text-align: center;
+            border-bottom: 4px solid var(--primary-color);
+        }
+        .kpi-card h3 { 
+            margin: 0; 
+            font-size: 14px; 
+            color: #666; 
+            text-transform: uppercase; 
+        }
+        .kpi-card p { 
+            margin: 10px 0 0 0; 
+            font-size: 24px; 
+            font-weight: bold; 
+            color: var(--primary-color); 
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('cadastro')">Cadastro de Boletos</button>
+        <button class="tab-btn" onclick="switchTab('dashboard')">Painel de Indicadores</button>
+    </div>
+
+    <div id="cadastro" class="screen active">
+        <form id="boletoForm">
+            <div>
+                <label for="fornecedor">FORNECEDOR</label>
+                <select id="fornecedor" required></select>
+            </div>
+            <div>
+                <label for="tipoServico">TIPO DE SERVIÇO</label>
+                <select id="tipoServico" required></select>
+            </div>
+            <div>
+                <label for="numDoc">Nº DO DOCUMENTO</label>
+                <input type="text" id="numDoc" required>
+            </div>
+            <div>
+                <label for="valor">VALOR (R$)</label>
+                <input type="number" id="valor" step="0.01" required>
+            </div>
+            <div>
+                <label for="vencimento">VENCIMENTO</label>
+                <input type="date" id="vencimento" required>
+            </div>
+            <div>
+                <label for="faturado">FATURADO (Mês/Ref)</label>
+                <select id="faturado" required>
+                    <option value="" disabled selected>Selecione o Mês</option>
+                    <option value="Jan">Jan</option>
+                    <option value="Fev">Fev</option>
+                    <option value="Mar">Mar</option>
+                    <option value="Abr">Abr</option>
+                    <option value="Mai">Mai</option>
+                    <option value="Jun">Jun</option>
+                    <option value="Jul">Jul</option>
+                    <option value="Ago">Ago</option>
+                    <option value="Set">Set</option>
+                    <option value="Out">Out</option>
+                    <option value="Nov">Nov</option>
+                    <option value="Dez">Dez</option>
+                </select>
+            </div>
+            <div>
+                <label for="tipoDespesa">TIPO DE DESPESA</label>
+                <select id="tipoDespesa" required>
+                    <option value="" disabled selected>Selecione</option>
+                    <option value="Recorrente">Recorrente</option>
+                    <option value="Única">Única</option>
+                </select>
+            </div>
+            <div class="full-width">
+                <label for="observacoes">OBSERVAÇÕES</label>
+                <input type="text" id="observacoes">
+            </div>
+            <button type="submit">Cadastrar Boleto</button>
+        </form>
+
+        <hr style="border: 1px solid #ddd; margin: 30px 0;">
+        <h3 style="color: var(--primary-color);">Boletos Cadastrados</h3>
+        
+        <div class="filtros-container">
+            <label>Filtrar por Vencimento Inicial: <input type="date" id="dataInicialTabela"></label>
+            <label>Vencimento Final: <input type="date" id="dataFinalTabela"></label>
+            <button class="btn-filtrar" onclick="atualizarInterface()">Aplicar Filtro</button>
+            <button class="btn-limpar" onclick="limparFiltrosTabela()">Limpar</button>
+        </div>
+
+        <div style="overflow-x: auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>FORNECEDOR</th>
+                        <th>TIPO DE SERVIÇO</th>
+                        <th>Nº DOC</th>
+                        <th>VALOR</th>
+                        <th>VENCIMENTO</th>
+                        <th>FATURADO</th>
+                        <th>TIPO DESPESA</th>
+                        <th>OBSERVAÇÕES</th>
+                        <th>DATA/HORA CADASTRO</th>
+                        <th>STATUS</th>
+                    </tr>
+                </thead>
+                <tbody id="tabelaBoletos"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="dashboard" class="screen">
+        
+        <div class="filtros-container">
+            <label>Filtrar por Vencimento Inicial: <input type="date" id="dataInicialFiltro"></label>
+            <label>Vencimento Final: <input type="date" id="dataFinalFiltro"></label>
+            <button class="btn-filtrar" onclick="atualizarDashboard()">Aplicar Filtro</button>
+            <button class="btn-limpar" onclick="limparFiltrosDashboard()">Limpar</button>
+        </div>
+
+        <div class="kpi-container" id="kpiCards">
+            </div>
+
+        <div class="dashboard-grid">
+            <div class="chart-container">
+                <canvas id="graficoServicos"></canvas>
+            </div>
+            <div class="chart-container">
+                <canvas id="graficoFornecedores"></canvas>
+            </div>
+            <div class="chart-container">
+                <canvas id="graficoHistoricoUnicas"></canvas>
+            </div>
+            <div class="chart-container">
+                <canvas id="graficoHistoricoTotais"></canvas>
+            </div>
+        </div>
+
+        <div class="analise-container">
+            <h3 style="color: var(--primary-color); margin-top: 0; margin-bottom: 10px;">Análise Descritiva de Gastos</h3>
+            <div style="display: flex; gap: 15px; margin-bottom: 15px; width: 100%; max-width: 400px;">
+                <div style="flex: 1;">
+                    <label for="mesAnalise">Selecione o Mês para Análise:</label>
+                    <select id="mesAnalise" onchange="carregarTextoAnalise()">
+                        <option value="Jan">Jan</option>
+                        <option value="Fev">Fev</option>
+                        <option value="Mar">Mar</option>
+                        <option value="Abr">Abr</option>
+                        <option value="Mai">Mai</option>
+                        <option value="Jun">Jun</option>
+                        <option value="Jul">Jul</option>
+                        <option value="Ago">Ago</option>
+                        <option value="Set">Set</option>
+                        <option value="Out">Out</option>
+                        <option value="Nov">Nov</option>
+                        <option value="Dez">Dez</option>
+                    </select>
+                </div>
+            </div>
+            <div style="width: 100%;">
+                <label for="textoAnalise">Escreva a análise financeira para o mês selecionado:</label>
+                <textarea id="textoAnalise" rows="5" placeholder="Digite aqui os pontos críticos, justificativas de aumentos ou observações gerais sobre os gastos deste mês..."></textarea>
+            </div>
+            <button class="btn-acao" style="margin-top: 10px;" onclick="salvarTextoAnalise()">Salvar Análise do Mês</button>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    // Configurações de conexão do Supabase
+    const SUPABASE_URL = 'https://rggqyorhnowiudxlursf.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJnZ3F5b3Jobm93aXVkeGx1cnNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzMjk5NDQsImV4cCI6MjA5NDkwNTk0NH0.NSOhmHC9h0mu7jdjbW4q7jFzexiz3AfF-TpjMQRr00k';
+    const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // 1. DADOS INICIAIS
+    const listaFornecedores = [
+        "AIR LIQUIDE", "ALBOR COLCHÃO", "BRASILHOSP", "BRASPRESS", "CAMPLAST", 
+        "CARONE CADEIRAS", "CENTRO DA SAÚDE", "CMOSDRAKE", "DISK BATERIAS", "DRAGER", 
+        "ETECMED", "GÁS DO NORTE", "GASES E TINTAS", "GASLIVE", "HAOXY", 
+        "HOSPICENTER", "INOXFIXI", "INOXFIXI ALUGUEL", "IPOG", "LOCMED", 
+        "MEDPLAST", "MERCADO LIVRE", "NAZARIA IMPERATRIZ", "NAZARIA TIMON", "OMHON", 
+        "PALMED", "PC SMART", "SAMSUNG", "SELTON", "STERILIZA", "TECLIFE", 
+        "TÉCNICOS W", "UNITEC", "VENTCARE 'RMS'", "VIVAMAR", "WRS HOSPITALAR", 
+        "ZIL FARMA", "OUTROS"
+    ];
+
+    const listaServicos = [
+        "ALUGUEL DE CILINDROS", "ALUGUEL DE EQUIPAMENTOS", "AQUISIÇÃO DE EQUIPAMENTOS", 
+        "AQUISIÇÃO DE MATERIAL", "CURSO", "MANUTENÇÃO", "ESTERILIZAÇÃO", "FRETE", 
+        "RECARGAS DE CILINDROS"
+    ];
+
+    const mesesOrdem = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+    let boletos = [];
+    let analisesMensais = {};
+    let chartInstances = {};
+
+    // 2. INICIALIZAÇÃO E POPULAÇÃO DOS SELECTS
+    window.onload = async () => {
+        const selectFornecedor = document.getElementById('fornecedor');
+        const selectServico = document.getElementById('tipoServico');
+
+        selectFornecedor.add(new Option('Selecione', '', true, true));
+        selectServico.add(new Option('Selecione', '', true, true));
+        
+        selectFornecedor.options[0].disabled = true;
+        selectServico.options[0].disabled = true;
+
+        listaFornecedores.forEach(f => selectFornecedor.add(new Option(f, f)));
+        listaServicos.forEach(s => selectServico.add(new Option(s, s)));
+
+        const mesAtualIndex = new Date().getMonth();
+        document.getElementById('mesAnalise').value = mesesOrdem[mesAtualIndex];
+
+        // Sincroniza dados com o Supabase na abertura do app
+        await carregarDadosDoSupabase();
+    };
+
+    // Buscar dados das duas tabelas em nuvem
+    async function carregarDadosDoSupabase() {
+        try {
+            // Buscar Boletos
+            const { data: dataBoletos, error: errB } = await _supabase.from('boletos').select('*').order('created_at', { ascending: false });
+            if (errB) throw errB;
+            
+            boletos = dataBoletos.map(b => ({
+                id: b.id,
+                fornecedor: b.fornecedor,
+                tipoServico: b.tipo_servico,
+                numDoc: b.num_doc,
+                valor: parseFloat(b.valor),
+                vencimento: b.vencimento,
+                faturado: b.faturado,
+                tipoDespesa: b.tipo_despesa,
+                observacoes: b.observacoes,
+                dataHoraCadastro: b.data_hora_cadastro,
+                status: b.status
+            })) || [];
+
+            // Buscar Análises Descritivas
+            const { data: dataAnalises, error: errA } = await _supabase.from('analises').select('*');
+            if (errA) throw errA;
+            
+            analisesMensais = {};
+            dataAnalises.forEach(a => {
+                analisesMensais[a.mes] = a.texto;
+            });
+
+            atualizarInterface();
+            carregarTextoAnalise();
+        } catch (error) {
+            console.error("Erro ao carregar dados do Supabase:", error.message);
+        }
+    }
+
+    // 3. NAVEGAÇÃO ENTRE ABAS
+    function switchTab(tabId) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        
+        document.getElementById(tabId).classList.add('active');
+        event.currentTarget.classList.add('active');
+
+        if (tabId === 'dashboard') {
+            atualizarDashboard();
+            carregarTextoAnalise();
+        }
+    }
+
+    // 4. CADASTRO DE BOLETOS (INSERE NO SUPABASE)
+    document.getElementById('boletoForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const agora = new Date();
+        const dataHoraFormatada = agora.toLocaleDateString('pt-BR') + ' ' + agora.toLocaleTimeString('pt-BR');
+        const idUnico = Date.now();
+
+        const novoBoleto = {
+            id: idUnico,
+            fornecedor: document.getElementById('fornecedor').value,
+            tipoServico: document.getElementById('tipoServico').value,
+            numDoc: document.getElementById('numDoc').value,
+            valor: parseFloat(document.getElementById('valor').value),
+            vencimento: document.getElementById('vencimento').value,
+            faturado: document.getElementById('faturado').value,
+            tipoDespesa: document.getElementById('tipoDespesa').value,
+            observacoes: document.getElementById('observacoes').value,
+            dataHoraCadastro: dataHoraFormatada,
+            status: "PASSADO PARA O FINANCEIRO"
+        };
+
+        try {
+            const { error } = await _supabase.from('boletos').insert([{
+                id: novoBoleto.id,
+                fornecedor: novoBoleto.fornecedor,
+                tipo_servico: novoBoleto.tipoServico,
+                num_doc: novoBoleto.numDoc,
+                valor: novoBoleto.valor,
+                vencimento: novoBoleto.vencimento,
+                faturado: novoBoleto.faturado,
+                tipo_despesa: novoBoleto.tipoDespesa,
+                observacoes: novoBoleto.observacoes,
+                data_hora_cadastro: novoBoleto.dataHoraCadastro,
+                status: novoBoleto.status
+            }]);
+
+            if (error) throw error;
+
+            boletos.unshift(novoBoleto); // Atualiza a lista local em memória
+            this.reset();
+            atualizarInterface();
+        } catch (error) {
+            alert("Erro ao salvar o boleto: " + error.message);
+        }
+    });
+
+    // 5. ALTERAR STATUS (ATUALIZA NO SUPABASE)
+    async function alternarStatus(id) {
+        const boleto = boletos.find(b => b.id === id);
+        if (boleto) {
+            const novoStatus = boleto.status === "PASSADO PARA O FINANCEIRO" ? "PAGO" : "PASSADO PARA O FINANCEIRO";
+            
+            try {
+                const { error } = await _supabase.from('boletos').update({ status: novoStatus }).eq('id', id);
+                if (error) throw error;
+
+                boleto.status = novoStatus;
+                atualizarInterface();
+            } catch (error) {
+                alert("Erro ao atualizar o status: " + error.message);
+            }
+        }
+    }
+
+    // 6. ATUALIZAR INTERFACE DA TABELA
+    function atualizarInterface() {
+        const tbody = document.getElementById('tabelaBoletos');
+        tbody.innerHTML = '';
+
+        let boletosFiltradosTabela = boletos;
+        const dtInicial = document.getElementById('dataInicialTabela').value;
+        const dtFinal = document.getElementById('dataFinalTabela').value;
+
+        if (dtInicial) boletosFiltradosTabela = boletosFiltradosTabela.filter(b => b.vencimento >= dtInicial);
+        if (dtFinal) boletosFiltradosTabela = boletosFiltradosTabela.filter(b => b.vencimento <= dtFinal);
+
+        boletosFiltradosTabela.forEach(b => {
+            const tr = document.createElement('tr');
+            
+            const valorFormatado = b.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            const dataVencimento = new Date(b.vencimento + 'T00:00:00').toLocaleDateString('pt-BR');
+            const classeStatus = b.status === "PAGO" ? "status-pago" : "status-passado";
+
+            tr.innerHTML = `
+                <td>${b.fornecedor}</td>
+                <td>${b.tipoServico}</td>
+                <td>${b.numDoc}</td>
+                <td>${valorFormatado}</td>
+                <td>${dataVencimento}</td>
+                <td>${b.faturado}</td>
+                <td>${b.tipoDespesa}</td>
+                <td>${b.observacoes || '-'}</td>
+                <td>${b.dataHoraCadastro || '-'}</td>
+                <td>
+                    <button class="btn-status ${classeStatus}" onclick="alternarStatus(${b.id})">
+                        ${b.status}
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function limparFiltrosTabela() {
+        document.getElementById('dataInicialTabela').value = '';
+        document.getElementById('dataFinalTabela').value = '';
+        atualizarInterface();
+    }
+
+    // 7. GERENCIAMENTO DA ANÁLISE DESCRITIVA MENSAL (UPSERT NO SUPABASE)
+    function carregarTextoAnalise() {
+        const mesSelecionado = document.getElementById('mesAnalise').value;
+        const textarea = document.getElementById('textoAnalise');
+        textarea.value = analisesMensais[mesSelecionado] || '';
+    }
+
+    async function salvarTextoAnalise() {
+        const mesSelecionado = document.getElementById('mesAnalise').value;
+        const texto = document.getElementById('textoAnalise').value;
+        
+        try {
+            const { error } = await _supabase.from('analises').upsert({
+                mes: mesSelecionado,
+                texto: texto,
+                updated_at: new Date()
+            }, { onConflict: 'mes' });
+
+            if (error) throw error;
+
+            analisesMensais[mesSelecionado] = texto;
+            alert(`Análise de ${mesSelecionado} salva em nuvem com sucesso!`);
+        } catch (error) {
+            alert("Erro ao salvar análise: " + error.message);
+        }
+    }
+
+    // 8. FILTROS E ATUALIZAÇÃO DO DASHBOARD
+    function limparFiltrosDashboard() {
+        document.getElementById('dataInicialFiltro').value = '';
+        document.getElementById('dataFinalFiltro').value = '';
+        atualizarDashboard();
+    }
+
+    function atualizarDashboard() {
+        let boletosFiltrados = boletos;
+        const dtInicial = document.getElementById('dataInicialFiltro').value;
+        const dtFinal = document.getElementById('dataFinalFiltro').value;
+
+        if (dtInicial) boletosFiltrados = boletosFiltrados.filter(b => b.vencimento >= dtInicial);
+        if (dtFinal) boletosFiltrados = boletosFiltrados.filter(b => b.vencimento <= dtFinal);
+
+        // 8.1. KPI Cards
+        const totalGeral = boletosFiltrados.reduce((acc, b) => acc + b.valor, 0);
+        const pendentes = boletosFiltrados.filter(b => b.status === "PASSADO PARA O FINANCEIRO").reduce((acc, b) => acc + b.valor, 0);
+        
+        document.getElementById('kpiCards').innerHTML = `
+            <div class="kpi-card">
+                <h3>Total Geral Lançado (Filtrado)</h3>
+                <p>${totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+            </div>
+            <div class="kpi-card" style="border-color: var(--warning-color);">
+                <h3>Pendente no Financeiro (Filtrado)</h3>
+                <p>${pendentes.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+            </div>
+        `;
+
+        // 8.2. Preparando os dados para os quatro gráficos estruturados
+        const dadosServicosFiltrados = {
+            "Aluguel de Equipamentos": 0,
+            "Custo com Oxigênio": 0,
+            "Esterilização": 0,
+            "Manutenção": 0
+        };
+        
+        const dadosFornecedoresFiltrados = {};
+        const dadosHistoricoUnicas = {};
+        const dadosHistoricoTotais = {};
+
+        boletosFiltrados.forEach(boleto => {
+            const servico = boleto.tipoServico;
+            const fornecedor = boleto.fornecedor;
+            const mes = boleto.faturado;
+            const tipoDespesa = boleto.tipoDespesa;
+
+            let servicoFiltrado = false;
+            if (servico === "ALUGUEL DE EQUIPAMENTOS") {
+                dadosServicosFiltrados["Aluguel de Equipamentos"] += boleto.valor;
+                servicoFiltrado = true;
+            } else if (servico === "ALUGUEL DE CILINDROS" || servico === "RECARGAS DE CILINDROS") {
+                dadosServicosFiltrados["Custo com Oxigênio"] += boleto.valor;
+                servicoFiltrado = true;
+            } else if (servico === "ESTERILIZAÇÃO") {
+                dadosServicosFiltrados["Esterilização"] += boleto.valor;
+                servicoFiltrado = true;
+            } else if (servico === "MANUTENÇÃO") {
+                dadosServicosFiltrados["Manutenção"] += boleto.valor;
+                servicoFiltrado = true;
+            }
+
+            if (servicoFiltrado) {
+                dadosFornecedoresFiltrados[fornecedor] = (dadosFornecedoresFiltrados[fornecedor] || 0) + boleto.valor;
+            }
+
+            if (mes) {
+                dadosHistoricoTotais[mes] = (dadosHistoricoTotais[mes] || 0) + boleto.valor;
+                if (tipoDespesa === "Única") {
+                    dadosHistoricoUnicas[mes] = (dadosHistoricoUnicas[mes] || 0) + boleto.valor;
+                }
+            }
+        });
+
+        const keysUnicasOrd = Object.keys(dadosHistoricoUnicas).sort((a, b) => mesesOrdem.indexOf(a) - mesesOrdem.indexOf(b));
+        const valsUnicasOrd = keysUnicasOrd.map(k => dadosHistoricoUnicas[k]);
+
+        const keysTotaisOrd = Object.keys(dadosHistoricoTotais).sort((a, b) => mesesOrdem.indexOf(a) - mesesOrdem.indexOf(b));
+        const valsTotaisOrd = keysTotaisOrd.map(k => dadosHistoricoTotais[k]);
+
+        // 8.3. Renderizando os Gráficos
+        const corPadrao = 'rgba(91, 155, 213, 0.9)';
+
+        renderizarGrafico('graficoServicos', 'bar', 'Despesas com Terceiros (Por Serviço)', Object.keys(dadosServicosFiltrados), Object.values(dadosServicosFiltrados), corPadrao);
+        renderizarGrafico('graficoFornecedores', 'bar', 'Despesas com Terceiros por Fornecedor', Object.keys(dadosFornecedoresFiltrados), Object.values(dadosFornecedoresFiltrados), corPadrao);
+        renderizarGrafico('graficoHistoricoUnicas', 'bar', 'Histórico Despesas Mensais (Somente Únicas)', keysUnicasOrd, valsUnicasOrd, corPadrao);
+        renderizarGrafico('graficoHistoricoTotais', 'bar', 'Histórico Despesas Mensais (Totais)', keysTotaisOrd, valsTotaisOrd, '#28a745');
+    }
+
+    // 9. FUNÇÃO CONSTRUTORA DE GRÁFICOS
+    function renderizarGrafico(canvasId, tipo, titulo, labels, dados, cor) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        
+        if (chartInstances[canvasId]) {
+            chartInstances[canvasId].destroy();
+        }
+
+        chartInstances[canvasId] = new Chart(ctx, {
+            type: tipo,
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Valor',
+                    data: dados,
+                    backgroundColor: cor,
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: titulo,
+                        font: { size: 16, family: 'Arial' },
+                        color: '#333'
+                    },
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return 'R$ ' + value.toLocaleString('pt-BR');
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+</script>
+
+</body>
+</html>
