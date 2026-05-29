@@ -289,7 +289,7 @@
                 <label for="observacoes">OBSERVAÇÕES</label>
                 <input type="text" id="observacoes">
             </div>
-            <button type="submit" id="btnSubmitForm">Cadastrar Boleto</button>
+            <button type="submit" id="btnSubmitForm">Cadastrar Despesa</button>
             <button type="button" id="btnCancelarEdicao" class="btn-limpar" style="display: none;" onclick="cancelarEdicao()">Cancelar Edição</button>
         </form>
 
@@ -642,7 +642,7 @@
         idEmEdicao = null;
         document.getElementById('boletoForm').reset();
         const btnSubmit = document.getElementById('btnSubmitForm');
-        btnSubmit.innerText = "Cadastrar Boleto";
+        btnSubmit.innerText = "Cadastrar Despesa";
         btnSubmit.style.backgroundColor = "var(--primary-color)";
         document.getElementById('btnCancelarEdicao').style.display = "none";
     }
