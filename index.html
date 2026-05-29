@@ -684,14 +684,13 @@
         }
     }
 
-    // 7. ATUALIZAR INTERFACE DA TABELA (RENDERIZAÇÃO COM NOVOS FILTROS)
+    // 7. ATUALIZAR INTERFACE DA TABELA
     function atualizarInterface() {
         const tbody = document.getElementById('tabelaBoletos');
         tbody.innerHTML = '';
 
         let boletosFiltradosTabela = boletos;
         
-        // Coletando valores de todos os filtros
         const dtInicial = document.getElementById('dataInicialTabela').value;
         const dtFinal = document.getElementById('dataFinalTabela').value;
         const fFornecedor = document.getElementById('filtroFornecedor').value;
@@ -699,7 +698,6 @@
         const fFaturado = document.getElementById('filtroFaturado').value;
         const fStatus = document.getElementById('filtroStatus').value;
 
-        // Aplicando os filtros sequencialmente
         if (dtInicial) boletosFiltradosTabela = boletosFiltradosTabela.filter(b => b.vencimento >= dtInicial);
         if (dtFinal) boletosFiltradosTabela = boletosFiltradosTabela.filter(b => b.vencimento <= dtFinal);
         if (fFornecedor) boletosFiltradosTabela = boletosFiltradosTabela.filter(b => b.fornecedor === fFornecedor);
@@ -789,6 +787,10 @@
 
     function atualizarDashboard() {
         let boletosFiltrados = boletos;
+        
+        // IGNORAR BOLETOS COM STATUS "CADASTRADO"
+        boletosFiltrados = boletosFiltrados.filter(b => b.status !== "CADASTRADO");
+
         const dtInicial = document.getElementById('dataInicialFiltro').value;
         const dtFinal = document.getElementById('dataFinalFiltro').value;
 
